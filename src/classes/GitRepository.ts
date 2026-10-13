@@ -26,10 +26,35 @@ export class GitRepository {
     return [...names].sort((first, second) => first.localeCompare(second, 'en', { numeric: true }));
   }
 
-  getCommits(since: Date, users: string[] = []): Commit[] {
-    return this.readCommits()
+  getCommits(since: Date, users: string[] = [], branch?: string): Commit[] {
+    const references = branch ? [this.resolveBranch(branch)] : ['--all', 'HEAD'];
+
+    return this.readCommits(references)
       .filter(commit => commit.date >= since)
       .filter(commit => this.matchesAuthor(commit, users));
+  }
+
+  private resolveBranch(branch: string): string {
+    const references = branch.startsWith('refs/')
+      ? [branch]
+      : [`refs/heads/${branch}`, `refs/remotes/${branch}`];
+
+    for (const reference of references) {
+      if (!reference.startsWith('refs/heads/') && !reference.startsWith('refs/remotes/')) {
+        continue;
+      }
+
+      try {
+        return execFileSync('git', ['-C', this.path, 'show-ref', '--verify', '--hash', reference], {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        }).trim();
+      } catch {
+        // Try the remote-tracking reference if the local branch does not exist.
+      }
+    }
+
+    throw new Error(`Ветка не найдена: ${branch}. Укажите локальную ветку или origin/имя-ветки.`);
   }
 
   private readCommits(references: string[] = ['--all', 'HEAD']): Commit[] {

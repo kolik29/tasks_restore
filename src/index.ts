@@ -12,7 +12,7 @@ function main(): void {
   }
 
   const repository = new GitRepository(options.repositoryPath);
-  const commits = repository.getCommits(options.since, options.users);
+  const commits = repository.getCommits(options.since, options.users, options.branch);
   const tickets = new TicketCollector().collect(commits);
   const releasedTickets = new ReleaseResolver(repository).resolve(tickets);
 

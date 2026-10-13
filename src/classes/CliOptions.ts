@@ -7,6 +7,7 @@ export class CliOptions {
     readonly since: Date,
     readonly users: string[],
     readonly outputPath: string,
+    readonly branch: string | undefined,
   ) {}
 
   static parse(): CliOptions | undefined {
@@ -16,12 +17,13 @@ export class CliOptions {
         date: { type: 'string' },
         user: { type: 'string' },
         output: { type: 'string', default: 'tickets.csv' },
+        branch: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
       },
     });
 
     if (values.help) {
-      console.log('npm start -- --path /path/to/repo --date YYYY-MM-DD [--user name-or-email,name-or-email] [--output tickets.csv]');
+      console.log('npm start -- --path /path/to/repo --date YYYY-MM-DD [--user name-or-email,name-or-email] [--output tickets.csv] [--branch branch-name]');
       return undefined;
     }
 
@@ -30,7 +32,14 @@ export class CliOptions {
     }
 
     const users = CliOptions.parseUsers(values.user);
+    const branch = values.branch?.trim();
+
+    if (branch !== undefined && !branch) {
+      throw new Error('--branch не может быть пустым');
+    }
+
     const output = values.output ?? 'tickets.csv';
+
     if (!output.trim()) {
       throw new Error('--output не может быть пустым');
     }
@@ -40,6 +49,7 @@ export class CliOptions {
       CliOptions.parseDate(values.date),
       users,
       resolve(output),
+      branch,
     );
   }
 
@@ -49,6 +59,7 @@ export class CliOptions {
     }
 
     const users = value.split(',').map(user => user.trim().toLowerCase());
+    
     if (users.some(user => user.length === 0)) {
       throw new Error('--user должен содержать непустые имена или email через запятую');
     }

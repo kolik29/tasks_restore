@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CliOptions } from '../dist/classes/CliOptions.js';
@@ -75,7 +75,7 @@ test('CLI scans branches and filters dates and authors', () => {
     git(['branch', 'release2-stage', 'main']);
     execFileSync(process.execPath, [cli, '--path', repo, '--date', '2026-05-01', '--user', 'ALICE@'], { cwd: root });
     const csv = readFileSync(output, 'utf8');
-    assert.equal(csv.split('\r\n')[0], '\uFEFFticket,parent,hash,date,title,user,Релиз');
+    assert.equal(csv.split('\r\n')[0], '\uFEFFticket,parent,hash,date,title,user,release');
     assert.equal(csv.split('\r\n').length - 2, 4);
     assert.match(csv, /WST-2,WST-1,[a-f0-9]{40},2026-05-02/);
     assert.match(csv, /WST-3,WST-1,[a-f0-9]{40},2026-05-02/);
@@ -89,6 +89,21 @@ test('CLI scans branches and filters dates and authors', () => {
     const combinedCsv = readFileSync(output, 'utf8');
     assert.equal(combinedCsv.split('\r\n').length - 2, 5);
     assert.match(combinedCsv, /WST-4,,[a-f0-9]{40},2026-05-04T12:00:00.000Z,Bob task,Bob/);
+    const selectedOutput = join(root, 'selected.csv');
+    execFileSync(process.execPath, [cli, '--path', repo, '--date', '2026-05-01', '--user', 'Alice,Bob', '--branch', 'main', '--output', selectedOutput], { cwd: root });
+    const selectedCsv = readFileSync(selectedOutput, 'utf8');
+    assert.match(selectedCsv, /WST-4,/);
+    assert.doesNotMatch(selectedCsv, /WST-5,/);
+    assert.equal(selectedCsv.split('\r\n').length - 2, 4);
+    git(['update-ref', 'refs/remotes/origin/project', 'feature']);
+    execFileSync(process.execPath, [cli, '--path', repo, '--date', '2026-05-01', '--branch', 'origin/project', '--output', selectedOutput], { cwd: root });
+    assert.match(readFileSync(selectedOutput, 'utf8'), /WST-5,/);
+    const missingOutput = join(root, 'missing.csv');
+    assert.throws(() => execFileSync(process.execPath, [cli, '--path', repo, '--date', '2026-05-01', '--branch', 'missing', '--output', missingOutput], { cwd: root, stdio: 'pipe' }), error => {
+      assert.match(error.stderr.toString(), /Ветка не найдена/);
+      return true;
+    });
+    assert.equal(existsSync(missingOutput), false);
     git(['checkout', '-q', '-b', 'tasks/WST-6']);
     commit('feat: task without ticket in subject', '2026-05-06T12:00:00Z');
     git(['update-ref', 'refs/remotes/origin/tasks/WST-6', 'HEAD']);
@@ -106,6 +121,6 @@ test('CLI scans branches and filters dates and authors', () => {
     execFileSync(process.execPath, [cli, '--path', repo, '--date', '2026-05-01', '--user', 'Alice', '--output', 'restored.csv'], { cwd: root });
     assert.equal(readFileSync(customOutput, 'utf8'), readFileSync(output, 'utf8'));
     execFileSync(process.execPath, [cli, '--path', repo, '--date', '2027-01-01'], { cwd: root });
-    assert.equal(readFileSync(output, 'utf8'), '\uFEFFticket,parent,hash,date,title,user,Релиз\r\n');
+    assert.equal(readFileSync(output, 'utf8'), '\uFEFFticket,parent,hash,date,title,user,release\r\n');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
